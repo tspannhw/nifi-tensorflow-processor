@@ -1,0 +1,30 @@
+/target/
+/images/
+*.jpg
+*.png
+*.gif
+/target/*.*
+/.settings/
+.DS_Store
+.springBeans
+.project
+/src/main/resources/application.yml
+/src/main/resources/application.properties
+application.*
+# Mobile Tools for Java (J2ME)
+.mtj.tmp/
+deploy.sh
+
+# Package Files #
+*.jar
+*.war
+*.ear
+*.nar
+*.zip
+*.tar
+*.gz
+*.cz
+*.class
+
+# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+hs_err_pid*

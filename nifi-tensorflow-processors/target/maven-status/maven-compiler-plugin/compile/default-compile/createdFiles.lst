@@ -1,0 +1,3 @@
+com/dataflowdeveloper/processors/process/TensorFlowService.class
+com/dataflowdeveloper/processors/process/TensorFlowService$GraphBuilder.class
+com/dataflowdeveloper/processors/process/TensorFlowProcessor.class
