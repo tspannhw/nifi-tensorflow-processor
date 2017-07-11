@@ -41,108 +41,114 @@ import org.apache.nifi.processor.ProcessorInitializationContext;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
-   
-@Tags({"corenlpprocessor"})
+
+@Tags({ "tensorflowprocessor" })
 @CapabilityDescription("Run TensorFlow Image Recognition")
 @SeeAlso({})
-@ReadsAttributes({@ReadsAttribute(attribute="", description="")})
-@WritesAttributes({@WritesAttribute(attribute="", description="")})
+@ReadsAttributes({ @ReadsAttribute(attribute = "", description = "") })
+@WritesAttributes({ @WritesAttribute(attribute = "", description = "") })
 public class TensorFlowProcessor extends AbstractProcessor {
 
 	public static final String ATTRIBUTE_OUTPUT_NAME = "probabilities";
 	public static final String ATTRIBUTE_INPUT_NAME = "imgpath";
+	public static final String ATTRIBUTE_INPUT_NAME2 = "modeldir";
 	public static final String PROPERTY_NAME_EXTRA = "Extra Resources";
-	
-    public static final PropertyDescriptor MY_PROPERTY = new PropertyDescriptor
-            .Builder().name(ATTRIBUTE_INPUT_NAME)
-            .description("Path to an image")
-            .required(true)
-            .expressionLanguageSupported(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .build();
-    
-    public static final Relationship REL_SUCCESS = new Relationship.Builder()
-            .name("success")
-            .description("Successfully determined image.")
-            .build();
 
-    public static final Relationship REL_FAILURE = new Relationship.Builder()
-            .name("failure")
-            .description("Failed to determine image.")
-            .build();
+	public static final PropertyDescriptor MY_PROPERTY = new PropertyDescriptor.Builder().name(ATTRIBUTE_INPUT_NAME)
+			.description("Path to an image").required(true).expressionLanguageSupported(true)
+			.addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
-    
-    private List<PropertyDescriptor> descriptors;
+	public static final PropertyDescriptor MY_PROPERTY2 = new PropertyDescriptor.Builder().name(ATTRIBUTE_INPUT_NAME2)
+			.description("Model Directory").required(true).expressionLanguageSupported(true)
+			.addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
-    private Set<Relationship> relationships;
+	public static final Relationship REL_SUCCESS = new Relationship.Builder().name("success")
+			.description("Successfully determined image.").build();
 
-    private TensorFlowService service;
-    
-    @Override
-    protected void init(final ProcessorInitializationContext context) {
-        final List<PropertyDescriptor> descriptors = new ArrayList<PropertyDescriptor>();
-        descriptors.add(MY_PROPERTY);
-        this.descriptors = Collections.unmodifiableList(descriptors);
+	public static final Relationship REL_FAILURE = new Relationship.Builder().name("failure")
+			.description("Failed to determine image.").build();
 
-        final Set<Relationship> relationships = new HashSet<Relationship>();
-        relationships.add(REL_SUCCESS);
-        relationships.add(REL_FAILURE);
-        this.relationships = Collections.unmodifiableSet(relationships);
-    }
+	private List<PropertyDescriptor> descriptors;
 
-    @Override
-    public Set<Relationship> getRelationships() {
-        return this.relationships;
-    }
+	private Set<Relationship> relationships;
 
-    @Override
-    public final List<PropertyDescriptor> getSupportedPropertyDescriptors() {
-        return descriptors;
-    }
+	private TensorFlowService service;
 
-    @OnScheduled
-    public void onScheduled(final ProcessContext context) {
-    	return;
-    }
+	@Override
+	protected void init(final ProcessorInitializationContext context) {
+		final List<PropertyDescriptor> descriptors = new ArrayList<PropertyDescriptor>();
+		descriptors.add(MY_PROPERTY);
+		descriptors.add(MY_PROPERTY2);
+		this.descriptors = Collections.unmodifiableList(descriptors);
 
-    @Override
-    public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
-        FlowFile flowFile = session.get();
-        if ( flowFile == null ) {
-        	flowFile = session.create();
-        }               
-		try {			
-		    flowFile.getAttributes();
-						
-	            String imagepath = flowFile.getAttribute(ATTRIBUTE_INPUT_NAME);
-	            String imagepath2 = context.getProperty(ATTRIBUTE_INPUT_NAME).evaluateAttributeExpressions(flowFile).getValue();
-	           
-			// TODO rename to image file
-			// TODO add input for model directory
-			imagepath = "/Volumes/Transcend/projects/nifi-tensorflow-processor/cat-1992140_1920.jpg";
-			String modelDir = "/Volumes/Transcend/projects/nifi-tensorflow-processor/models"; 
-	            if (imagepath == null) {   
-	            	imagepath = imagepath2;
-	            }
-	            if ( imagepath == null) {
-	            	return;
-	            }
-	       	
-	        	String value = service.getInception(imagepath, modelDir);
-	        	
-	        	if ( value == null) { 
-	        		return;
-	        	}
+		final Set<Relationship> relationships = new HashSet<Relationship>();
+		relationships.add(REL_SUCCESS);
+		relationships.add(REL_FAILURE);
+		this.relationships = Collections.unmodifiableSet(relationships);
+	}
+
+	@Override
+	public Set<Relationship> getRelationships() {
+		return this.relationships;
+	}
+
+	@Override
+	public final List<PropertyDescriptor> getSupportedPropertyDescriptors() {
+		return descriptors;
+	}
+
+	@OnScheduled
+	public void onScheduled(final ProcessContext context) {
+		return;
+	}
+
+	@Override
+	public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
+		FlowFile flowFile = session.get();
+		if (flowFile == null) {
+			flowFile = session.create();
+		}
+		try {
+			flowFile.getAttributes();
+
+			String imagepath = flowFile.getAttribute(ATTRIBUTE_INPUT_NAME);
+			String imagepath2 = context.getProperty(ATTRIBUTE_INPUT_NAME).evaluateAttributeExpressions(flowFile)
+					.getValue();
+
+			if (imagepath == null) {
+				imagepath = imagepath2;
+			}
+			if (imagepath == null) {
+				return;
+			}
+
+			String modelDir = flowFile.getAttribute(ATTRIBUTE_INPUT_NAME2);
+			String modelDir2 = context.getProperty(ATTRIBUTE_INPUT_NAME2).evaluateAttributeExpressions(flowFile)
+					.getValue();
+
+			if (modelDir == null) {
+				modelDir = modelDir2;
+			}
+			if (modelDir == null) {
+				modelDir = "/models";
+			}
+
+			service = new TensorFlowService();
+			String value = service.getInception(imagepath, modelDir);
+
+			if (value == null) {
+				return;
+			}
 
 			flowFile = session.putAttribute(flowFile, "mime.type", "application/json");
 			flowFile = session.putAttribute(flowFile, ATTRIBUTE_OUTPUT_NAME, value);
 
 			session.transfer(flowFile, REL_SUCCESS);
 			session.commit();
-		   } catch (final Throwable t) {
-			   getLogger().error("Unable to process TensorFlow Processor file " + t.getLocalizedMessage()) ;
-			   getLogger().error("{} failed to process due to {}; rolling back session", new Object[]{this, t});
-	            throw t;
+		} catch (final Throwable t) {
+			getLogger().error("Unable to process TensorFlow Processor file " + t.getLocalizedMessage());
+			getLogger().error("{} failed to process due to {}; rolling back session", new Object[] { this, t });
+			throw t;
 		}
-    }
+	}
 }

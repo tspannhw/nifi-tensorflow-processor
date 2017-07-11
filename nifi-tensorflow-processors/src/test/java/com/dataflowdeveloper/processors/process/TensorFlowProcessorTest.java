@@ -39,11 +39,19 @@ public class TensorFlowProcessorTest {
 
         public static final String ATTRIBUTE_OUTPUT_NAME = "probabilities";
         public static final String ATTRIBUTE_INPUT_NAME = "imgpath";
+    	public static final String ATTRIBUTE_INPUT_NAME2 = "modeldir";
         public static final String PROPERTY_NAME_EXTRA = "Extra Resources";
 
     public static final PropertyDescriptor MY_PROPERTY = new PropertyDescriptor
             .Builder().name(ATTRIBUTE_INPUT_NAME)
             .description("image")
+            .required(true)
+            .expressionLanguageSupported(true)
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build();
+    public static final PropertyDescriptor MY_PROPERTY2 = new PropertyDescriptor
+            .Builder().name(ATTRIBUTE_INPUT_NAME2)
+            .description("Model Directory")
             .required(true)
             .expressionLanguageSupported(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
@@ -57,7 +65,8 @@ public class TensorFlowProcessorTest {
 	@Test
 	public void testProcessor() {
 		
-		testRunner.setProperty(MY_PROPERTY, "/Volumes/Transcend/projects/nifi-tensorflow-processor/cat-1992140_1920.jpg");
+		testRunner.setProperty(MY_PROPERTY, "/Volumes/Transcend/projects/nifi-tensorflow-processor/images/squirrelshirt.jpg");
+		testRunner.setProperty(MY_PROPERTY2, "/Volumes/Transcend/projects/nifi-tensorflow-processor/models/");
 		
 		try {
 			testRunner.enqueue(new FileInputStream(new File("src/test/resources/test.txt")));
