@@ -47,6 +47,11 @@ import org.apache.nifi.processor.util.StandardValidators;
 @SeeAlso({})
 @ReadsAttributes({ @ReadsAttribute(attribute = "", description = "") })
 @WritesAttributes({ @WritesAttribute(attribute = "", description = "") })
+/**
+ * 
+ * @author tspann
+ *
+ */
 public class TensorFlowProcessor extends AbstractProcessor {
 
 	public static final String ATTRIBUTE_OUTPUT_NAME = "probabilities";
