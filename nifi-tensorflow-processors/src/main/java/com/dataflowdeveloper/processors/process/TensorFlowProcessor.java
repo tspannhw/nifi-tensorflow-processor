@@ -23,9 +23,18 @@ import java.io.InputStream;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.nifi.annotation.behavior.EventDriven;
@@ -64,7 +73,7 @@ import org.apache.nifi.processor.util.StandardValidators;
  */
 public class TensorFlowProcessor extends AbstractProcessor {
 
-	public static final String ATTRIBUTE_OUTPUT_NAME = "probabilities";
+	public static final String ATTRIBUTE_OUTPUT_NAME = "tf.probabilities";
 	public static final String MODEL_DIR_NAME = "modeldir";
 	public static final String PROPERTY_NAME_EXTRA = "Extra Resources";
 
@@ -134,21 +143,28 @@ public class TensorFlowProcessor extends AbstractProcessor {
 			service = new TensorFlowService();
 			// read all bytes of the flowfile (tensor requires whole image)
 			InputStream is = session.read(flowFile);
-			String value; 
+			List<Entry<Float, String>> results;
 			try {
 				byte[] byteArray = IOUtils.toByteArray(is);
-				value = service.getInception(byteArray, modelDir);
-
+				results = service.getInception(byteArray, modelDir).limit(10).collect(Collectors.toList());
 			} catch(Exception e) {
 				throw new ProcessException(e);
 			} finally {
 				is.close();
 			}
 			
-			if (value == null) {
+			if (results == null) {
 				session.transfer(flowFile, REL_UNMATCHED);
 			} else {
-				flowFile = session.putAttribute(flowFile, ATTRIBUTE_OUTPUT_NAME, value);
+				HashMap<String,String> attributes = new HashMap<String,String>(results.size() * 2);
+				for(int i = 0; i < results.size(); i++) {
+					Object[] key = new Object[] { ATTRIBUTE_OUTPUT_NAME, i };
+					
+					Entry<Float, String> entry = results.get(i);
+					attributes.put(String.format("%s.%d.label", key), entry.getValue());
+					attributes.put(String.format("%s.%d.probability", key), entry.getKey().toString());
+				}					
+				flowFile = session.putAllAttributes(flowFile, attributes);
 				session.transfer(flowFile, REL_SUCCESS);
 			}
 			session.commit();

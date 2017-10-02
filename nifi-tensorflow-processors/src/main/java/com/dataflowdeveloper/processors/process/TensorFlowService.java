@@ -8,9 +8,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import org.tensorflow.DataType;
 import org.tensorflow.Graph;
@@ -29,7 +38,7 @@ public class TensorFlowService {
 	private Map<Path, Graph> modelCache = new HashMap<Path, Graph>();
 	private Map<Path, List<String>> labelCache = new HashMap<Path, List<String>>();
 
-	public String getInception(byte[] imageBytes, String modelDir) {
+	public Stream<Entry<Float,String>> getInception(byte[] imageBytes, String modelDir) {
 		Graph g = getOrCreate(Paths.get(modelDir, "graph.pb"));
 		try (Session s = new Session(g)) {
 			List<String> labels = getOrCreateLabels(Paths.get(modelDir, "label.txt"));
@@ -43,14 +52,20 @@ public class TensorFlowService {
 							Arrays.toString(rshape)));
 				}
 				int nlabels = (int) rshape[1];
+				int mLabeled = Math.min(labels.size(), nlabels);
+				
 				float[] labelProbabilities = result.copyTo(new float[1][nlabels])[0];
-				int bestLabelIdx = maxIndex(labelProbabilities);
-				return String.format("BEST MATCH: %s (%.2f%% likely)", labels.get(bestLabelIdx),
-						labelProbabilities[bestLabelIdx] * 100f);
+
+				SortedMap<Float, String> results = new TreeMap<Float,String>();
+				for (int i = 0; i < mLabeled; i++) {
+					results.put(labelProbabilities[i],labels.get(i));
+				}
+
+				return results.entrySet().stream().sorted(Collections.reverseOrder(Map.Entry.comparingByKey()));
 			} catch (Exception x) {
 				x.printStackTrace();
 			}
-			return "Unknown";
+			return null;
 		}
 	}
 

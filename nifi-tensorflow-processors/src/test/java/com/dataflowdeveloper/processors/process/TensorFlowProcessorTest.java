@@ -16,6 +16,7 @@
  */
 package com.dataflowdeveloper.processors.process;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
 import java.io.File;
@@ -76,8 +77,7 @@ public class TensorFlowProcessorTest {
 		List<MockFlowFile> successFiles = testRunner.getFlowFilesForRelationship(TensorFlowProcessor.REL_SUCCESS);
 
 		for (MockFlowFile mockFile : successFiles) {
-			System.out.println("Attribute: " + mockFile.getAttribute(TensorFlowProcessor.ATTRIBUTE_OUTPUT_NAME));
-			assertNotNull(mockFile.getAttribute(TensorFlowProcessor.ATTRIBUTE_OUTPUT_NAME));
+			assertEquals("giant panda", mockFile.getAttribute("tf.probabilities.0.label"));
 		}
 	}
 }
