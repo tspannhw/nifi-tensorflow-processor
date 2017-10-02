@@ -3,6 +3,7 @@
 *.png
 *.gif
 /target/*.*
+*/target/
 /.settings/
 .DS_Store
 .springBeans
