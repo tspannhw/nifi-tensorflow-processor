@@ -135,7 +135,6 @@ public class TensorFlowProcessor extends AbstractProcessor {
 				if (value == null) {
 					session.transfer(flowFile, REL_UNMATCHED);
 				} else {
-					flowFile = session.putAttribute(flowFile, "mime.type", "application/json");
 					flowFile = session.putAttribute(flowFile, ATTRIBUTE_OUTPUT_NAME, value);
 					session.transfer(flowFile, REL_SUCCESS);
 				}
