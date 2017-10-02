@@ -53,7 +53,7 @@ public class TensorFlowProcessorTest {
 
 	@Test
 	public void testProcessor() throws Exception {
-		testRunner.setProperty(TensorFlowProcessor.MODEL_DIR, pathOfResource("models/tensorflow_inception_graph.pb"));
+		testRunner.setProperty(TensorFlowProcessor.MODEL_DIR, pathOfResource("models/graph.pb"));
 		testRunner.enqueue(this.getClass().getClassLoader().getResourceAsStream("test.jpg"));
 
 		runAndAssertHappy();
@@ -61,7 +61,7 @@ public class TensorFlowProcessorTest {
 
 	@Test
 	public void testReruns() throws Exception {
-		testRunner.setProperty(TensorFlowProcessor.MODEL_DIR, pathOfResource("models/tensorflow_inception_graph.pb"));
+		testRunner.setProperty(TensorFlowProcessor.MODEL_DIR, pathOfResource("models/graph.pb"));
 		testRunner.enqueue(this.getClass().getClassLoader().getResourceAsStream("test.jpg"));
 		testRunner.enqueue(this.getClass().getClassLoader().getResourceAsStream("test.jpg"));
 

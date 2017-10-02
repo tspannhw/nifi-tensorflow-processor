@@ -30,9 +30,9 @@ public class TensorFlowService {
 	private Map<Path, List<String>> labelCache = new HashMap<Path, List<String>>();
 
 	public String getInception(byte[] imageBytes, String modelDir) {
-		Graph g = getOrCreate(Paths.get(modelDir, "tensorflow_inception_graph.pb"));
+		Graph g = getOrCreate(Paths.get(modelDir, "graph.pb"));
 		try (Session s = new Session(g)) {
-			List<String> labels = getOrCreateLabels(Paths.get(modelDir, "imagenet_comp_graph_label_strings.txt"));
+			List<String> labels = getOrCreateLabels(Paths.get(modelDir, "label.txt"));
 			try {
 				Tensor image = constructAndExecuteGraphToNormalizeImage(imageBytes);
 				Tensor result = s.runner().feed("input", image).fetch("output").run().get(0);
