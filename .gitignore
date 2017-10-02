@@ -1,9 +1,8 @@
-/target/
+target/
 /images/
 *.png
 *.gif
-/target/*.*
-*/target/
+target/*
 /.settings/
 .DS_Store
 .springBeans
