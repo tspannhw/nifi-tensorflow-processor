@@ -28,8 +28,11 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.nifi.annotation.behavior.EventDriven;
 import org.apache.nifi.annotation.behavior.ReadsAttribute;
 import org.apache.nifi.annotation.behavior.ReadsAttributes;
+import org.apache.nifi.annotation.behavior.SideEffectFree;
+import org.apache.nifi.annotation.behavior.SupportsBatching;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
 import org.apache.nifi.annotation.behavior.WritesAttributes;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
@@ -47,11 +50,13 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.io.InputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 
-@Tags({ "tensorflowprocessor" })
+@EventDriven
+@SideEffectFree
+@SupportsBatching
+@Tags({ "tensorflow", "computer vision", "image" })
 @CapabilityDescription("Run TensorFlow Image Recognition")
 @SeeAlso({})
-@ReadsAttributes({ @ReadsAttribute(attribute = "", description = "") })
-@WritesAttributes({ @WritesAttribute(attribute = "", description = "") })
+@WritesAttributes({ @WritesAttribute(attribute = "probilities", description = "The probabilites and labels") })
 /**
  * 
  * @author tspann
@@ -90,6 +95,7 @@ public class TensorFlowProcessor extends AbstractProcessor {
 		final Set<Relationship> relationships = new HashSet<Relationship>();
 		relationships.add(REL_SUCCESS);
 		relationships.add(REL_FAILURE);
+		relationships.add(REL_UNMATCHED);
 		this.relationships = Collections.unmodifiableSet(relationships);
 	}
 
@@ -128,22 +134,23 @@ public class TensorFlowProcessor extends AbstractProcessor {
 			service = new TensorFlowService();
 			// read all bytes of the flowfile (tensor requires whole image)
 			InputStream is = session.read(flowFile);
+			String value; 
 			try {
 				byte[] byteArray = IOUtils.toByteArray(is);
-				String value = service.getInception(byteArray, modelDir);
+				value = service.getInception(byteArray, modelDir);
 
-				if (value == null) {
-					session.transfer(flowFile, REL_UNMATCHED);
-				} else {
-					flowFile = session.putAttribute(flowFile, ATTRIBUTE_OUTPUT_NAME, value);
-					session.transfer(flowFile, REL_SUCCESS);
-				}
 			} catch(Exception e) {
 				throw new ProcessException(e);
 			} finally {
 				is.close();
 			}
-
+			
+			if (value == null) {
+				session.transfer(flowFile, REL_UNMATCHED);
+			} else {
+				flowFile = session.putAttribute(flowFile, ATTRIBUTE_OUTPUT_NAME, value);
+				session.transfer(flowFile, REL_SUCCESS);
+			}
 			session.commit();
 		} catch (final Throwable t) {
 			getLogger().error("Unable to process TensorFlow Processor file " + t.getLocalizedMessage());
