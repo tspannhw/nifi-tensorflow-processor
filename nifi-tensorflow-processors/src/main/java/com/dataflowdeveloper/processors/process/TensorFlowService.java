@@ -10,17 +10,13 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tensorflow.DataType;
 import org.tensorflow.Graph;
 import org.tensorflow.Output;
@@ -35,37 +31,44 @@ import org.tensorflow.Tensor;
  */
 public class TensorFlowService {
 
+	private final Logger logger = LoggerFactory.getLogger(TensorFlowService.class);
+
 	private Map<Path, Graph> modelCache = new HashMap<Path, Graph>();
 	private Map<Path, List<String>> labelCache = new HashMap<Path, List<String>>();
 
-	public Stream<Entry<Float,String>> getInception(byte[] imageBytes, String modelDir) {
+	public List<Entry<Float, String>> getInception(byte[] imageBytes, String modelDir) {
+		logger.info(String.format("getInception: %d bytes %s", new Object[] { imageBytes.length, Paths.get(modelDir, "graph.pb") }));
 		Graph g = getOrCreate(Paths.get(modelDir, "graph.pb"));
 		try (Session s = new Session(g)) {
 			List<String> labels = getOrCreateLabels(Paths.get(modelDir, "label.txt"));
-			try {
-				Tensor image = constructAndExecuteGraphToNormalizeImage(imageBytes);
-				Tensor result = s.runner().feed("input", image).fetch("output").run().get(0);
-				final long[] rshape = result.shape();
-				if (result.numDimensions() != 2 || rshape[0] != 1) {
-					throw new RuntimeException(String.format(
-							"Expected model to produce a [1 N] shaped tensor where N is the number of labels, instead it produced one with shape %s",
-							Arrays.toString(rshape)));
-				}
-				int nlabels = (int) rshape[1];
-				int mLabeled = Math.min(labels.size(), nlabels);
-				
-				float[] labelProbabilities = result.copyTo(new float[1][nlabels])[0];
+			Tensor image = constructAndExecuteGraphToNormalizeImage(imageBytes);
+			Tensor result = s.runner().feed("input", image).fetch("output").run().get(0);
+			logger.debug("found results");
 
-				SortedMap<Float, String> results = new TreeMap<Float,String>();
-				for (int i = 0; i < mLabeled; i++) {
-					results.put(labelProbabilities[i],labels.get(i));
-				}
-
-				return results.entrySet().stream().sorted(Collections.reverseOrder(Map.Entry.comparingByKey()));
-			} catch (Exception x) {
-				x.printStackTrace();
+			final long[] rshape = result.shape();
+			if (result.numDimensions() != 2 || rshape[0] != 1) {
+				throw new RuntimeException(String.format(
+						"Expected model to produce a [1 N] shaped tensor where N is the number of labels, instead it produced one with shape %s",
+						Arrays.toString(rshape)));
 			}
-			return null;
+			int nlabels = (int) rshape[1];
+
+			logger.debug(String.format("number of labels %d, %d", new Object[] { labels.size(), nlabels }));
+			int mLabeled = Math.min(labels.size(), nlabels);
+
+			float[] labelProbabilities = result.copyTo(new float[1][nlabels])[0];
+
+			HashMap<Float, String> results = new HashMap<Float, String>();
+			for (int i = 0; i < mLabeled; i++) {
+				results.put(labelProbabilities[i], labels.get(i));
+			}
+
+			return Collections.synchronizedList(
+					results.entrySet().stream().sorted(Collections.reverseOrder(Map.Entry.comparingByKey())).limit(10)
+							.collect(Collectors.toList()));
+		} catch (Exception e) {
+			logger.error("Failed in tensorflow", e);
+			throw(e);
 		}
 	}
 
@@ -117,16 +120,6 @@ public class TensorFlowService {
 				return s.runner().fetch(output.op().name()).run().get(0);
 			}
 		}
-	}
-
-	private static int maxIndex(float[] probabilities) {
-		int best = 0;
-		for (int i = 1; i < probabilities.length; ++i) {
-			if (probabilities[i] > probabilities[best]) {
-				best = i;
-			}
-		}
-		return best;
 	}
 
 	private static byte[] readAllBytesOrExit(Path path) {
