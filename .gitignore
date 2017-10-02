@@ -1,6 +1,5 @@
 /target/
 /images/
-*.jpg
 *.png
 *.gif
 /target/*.*
