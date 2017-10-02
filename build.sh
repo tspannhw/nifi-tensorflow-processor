@@ -1,1 +1,3 @@
-mvn install -DskipTests
+#!/bin/sh
+
+mvn clean package
