@@ -22,6 +22,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.UnsupportedEncodingException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.file.Paths;
 import java.util.List;
 
 import org.apache.nifi.components.PropertyDescriptor;
@@ -36,58 +40,44 @@ public class TensorFlowProcessorTest {
 
 	private TestRunner testRunner;
 
-
-        public static final String ATTRIBUTE_OUTPUT_NAME = "probabilities";
-        public static final String ATTRIBUTE_INPUT_NAME = "imgpath";
-    	public static final String ATTRIBUTE_INPUT_NAME2 = "modeldir";
-        public static final String PROPERTY_NAME_EXTRA = "Extra Resources";
-
-    public static final PropertyDescriptor MY_PROPERTY = new PropertyDescriptor
-            .Builder().name(ATTRIBUTE_INPUT_NAME)
-            .description("image")
-            .required(true)
-            .expressionLanguageSupported(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .build();
-    public static final PropertyDescriptor MY_PROPERTY2 = new PropertyDescriptor
-            .Builder().name(ATTRIBUTE_INPUT_NAME2)
-            .description("Model Directory")
-            .required(true)
-            .expressionLanguageSupported(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .build();
-    
 	@Before
 	public void init() {
 		testRunner = TestRunners.newTestRunner(TensorFlowProcessor.class);
 	}
 
-	@Test
-	public void testProcessor() {
-		
-		testRunner.setProperty(MY_PROPERTY, "/Volumes/Transcend/projects/nifi-tensorflow-processor/images/squirrelshirt.jpg");
-		testRunner.setProperty(MY_PROPERTY2, "/Volumes/Transcend/projects/nifi-tensorflow-processor/models/");
-		
-		try {
-			testRunner.enqueue(new FileInputStream(new File("src/test/resources/test.txt")));
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-		}
+	private String pathOfResource(String name) throws URISyntaxException {
+		URL r = this.getClass().getClassLoader().getResource(name);
+		URI uri = r.toURI();
+		return Paths.get(uri).toAbsolutePath().getParent().toString();
+	}
 
+	@Test
+	public void testProcessor() throws Exception {
+		testRunner.setProperty(TensorFlowProcessor.MODEL_DIR, pathOfResource("models/graph.pb"));
+		testRunner.enqueue(this.getClass().getClassLoader().getResourceAsStream("test.jpg"));
+
+		runAndAssertHappy();
+	}
+
+	@Test
+	public void testReruns() throws Exception {
+		testRunner.setProperty(TensorFlowProcessor.MODEL_DIR, pathOfResource("models/graph.pb"));
+		testRunner.enqueue(this.getClass().getClassLoader().getResourceAsStream("test.jpg"));
+		testRunner.enqueue(this.getClass().getClassLoader().getResourceAsStream("test.jpg"));
+
+		runAndAssertHappy();
+	}
+
+	private void runAndAssertHappy() {
 		testRunner.setValidateExpressionUsage(false);
 		testRunner.run();
 		testRunner.assertValid();
+		testRunner.assertAllFlowFilesTransferred(TensorFlowProcessor.REL_SUCCESS);
 		List<MockFlowFile> successFiles = testRunner.getFlowFilesForRelationship(TensorFlowProcessor.REL_SUCCESS);
 
 		for (MockFlowFile mockFile : successFiles) {
-			try {
-				System.out.println("FILE:" + new String(mockFile.toByteArray(), "UTF-8"));
-				System.out.println("Attribute: " + mockFile.getAttribute(TensorFlowProcessor.ATTRIBUTE_OUTPUT_NAME));
-				
-				assertNotNull(  mockFile.getAttribute(TensorFlowProcessor.ATTRIBUTE_OUTPUT_NAME) );
-			} catch (UnsupportedEncodingException e) {
-				e.printStackTrace();
-			}
+			System.out.println("Attribute: " + mockFile.getAttribute(TensorFlowProcessor.ATTRIBUTE_OUTPUT_NAME));
+			assertNotNull(mockFile.getAttribute(TensorFlowProcessor.ATTRIBUTE_OUTPUT_NAME));
 		}
 	}
 }

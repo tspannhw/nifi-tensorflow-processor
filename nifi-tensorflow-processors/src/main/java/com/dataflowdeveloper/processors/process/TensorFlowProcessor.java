@@ -16,6 +16,9 @@
  */
 package com.dataflowdeveloper.processors.process;
 
+import java.io.IOException;
+import java.io.InputStream;
+
 // see:   https://raw.githubusercontent.com/tensorflow/tensorflow/r1.2/tensorflow/java/src/main/java/org/tensorflow/examples/LabelImage.java
 
 import java.util.ArrayList;
@@ -24,8 +27,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.commons.io.IOUtils;
+import org.apache.nifi.annotation.behavior.EventDriven;
 import org.apache.nifi.annotation.behavior.ReadsAttribute;
 import org.apache.nifi.annotation.behavior.ReadsAttributes;
+import org.apache.nifi.annotation.behavior.SideEffectFree;
+import org.apache.nifi.annotation.behavior.SupportsBatching;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
 import org.apache.nifi.annotation.behavior.WritesAttributes;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
@@ -40,13 +47,16 @@ import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.ProcessorInitializationContext;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
+import org.apache.nifi.processor.io.InputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 
-@Tags({ "tensorflowprocessor" })
+@EventDriven
+@SideEffectFree
+@SupportsBatching
+@Tags({ "tensorflow", "computer vision", "image" })
 @CapabilityDescription("Run TensorFlow Image Recognition")
 @SeeAlso({})
-@ReadsAttributes({ @ReadsAttribute(attribute = "", description = "") })
-@WritesAttributes({ @WritesAttribute(attribute = "", description = "") })
+@WritesAttributes({ @WritesAttribute(attribute = "probilities", description = "The probabilites and labels") })
 /**
  * 
  * @author tspann
@@ -55,20 +65,17 @@ import org.apache.nifi.processor.util.StandardValidators;
 public class TensorFlowProcessor extends AbstractProcessor {
 
 	public static final String ATTRIBUTE_OUTPUT_NAME = "probabilities";
-	public static final String ATTRIBUTE_INPUT_NAME = "imgpath";
-	public static final String ATTRIBUTE_INPUT_NAME2 = "modeldir";
+	public static final String MODEL_DIR_NAME = "modeldir";
 	public static final String PROPERTY_NAME_EXTRA = "Extra Resources";
 
-	public static final PropertyDescriptor MY_PROPERTY = new PropertyDescriptor.Builder().name(ATTRIBUTE_INPUT_NAME)
-			.description("Path to an image").required(true).expressionLanguageSupported(true)
-			.addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
-
-	public static final PropertyDescriptor MY_PROPERTY2 = new PropertyDescriptor.Builder().name(ATTRIBUTE_INPUT_NAME2)
+	public static final PropertyDescriptor MODEL_DIR = new PropertyDescriptor.Builder().name(MODEL_DIR_NAME)
 			.description("Model Directory").required(true).expressionLanguageSupported(true)
 			.addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
 	public static final Relationship REL_SUCCESS = new Relationship.Builder().name("success")
 			.description("Successfully determined image.").build();
+	public static final Relationship REL_UNMATCHED = new Relationship.Builder().name("unmatched")
+			.description("Found no matches in image").build();
 
 	public static final Relationship REL_FAILURE = new Relationship.Builder().name("failure")
 			.description("Failed to determine image.").build();
@@ -82,13 +89,13 @@ public class TensorFlowProcessor extends AbstractProcessor {
 	@Override
 	protected void init(final ProcessorInitializationContext context) {
 		final List<PropertyDescriptor> descriptors = new ArrayList<PropertyDescriptor>();
-		descriptors.add(MY_PROPERTY);
-		descriptors.add(MY_PROPERTY2);
+		descriptors.add(MODEL_DIR);
 		this.descriptors = Collections.unmodifiableList(descriptors);
 
 		final Set<Relationship> relationships = new HashSet<Relationship>();
 		relationships.add(REL_SUCCESS);
 		relationships.add(REL_FAILURE);
+		relationships.add(REL_UNMATCHED);
 		this.relationships = Collections.unmodifiableSet(relationships);
 	}
 
@@ -116,44 +123,38 @@ public class TensorFlowProcessor extends AbstractProcessor {
 		try {
 			flowFile.getAttributes();
 
-			String imagepath = flowFile.getAttribute(ATTRIBUTE_INPUT_NAME);
-			String imagepath2 = context.getProperty(ATTRIBUTE_INPUT_NAME).evaluateAttributeExpressions(flowFile)
-					.getValue();
-
-			if (imagepath == null) {
-				imagepath = imagepath2;
-			}
-			if (imagepath == null) {
-				return;
-			}
-
-			String modelDir = flowFile.getAttribute(ATTRIBUTE_INPUT_NAME2);
-			String modelDir2 = context.getProperty(ATTRIBUTE_INPUT_NAME2).evaluateAttributeExpressions(flowFile)
-					.getValue();
-
+			String modelDir = flowFile.getAttribute(MODEL_DIR_NAME);
 			if (modelDir == null) {
-				modelDir = modelDir2;
+				modelDir = context.getProperty(MODEL_DIR_NAME).evaluateAttributeExpressions(flowFile).getValue();
 			}
 			if (modelDir == null) {
 				modelDir = "/models";
 			}
 
 			service = new TensorFlowService();
-			String value = service.getInception(imagepath, modelDir);
+			// read all bytes of the flowfile (tensor requires whole image)
+			InputStream is = session.read(flowFile);
+			String value; 
+			try {
+				byte[] byteArray = IOUtils.toByteArray(is);
+				value = service.getInception(byteArray, modelDir);
 
-			if (value == null) {
-				return;
+			} catch(Exception e) {
+				throw new ProcessException(e);
+			} finally {
+				is.close();
 			}
-
-			flowFile = session.putAttribute(flowFile, "mime.type", "application/json");
-			flowFile = session.putAttribute(flowFile, ATTRIBUTE_OUTPUT_NAME, value);
-
-			session.transfer(flowFile, REL_SUCCESS);
+			
+			if (value == null) {
+				session.transfer(flowFile, REL_UNMATCHED);
+			} else {
+				flowFile = session.putAttribute(flowFile, ATTRIBUTE_OUTPUT_NAME, value);
+				session.transfer(flowFile, REL_SUCCESS);
+			}
 			session.commit();
 		} catch (final Throwable t) {
 			getLogger().error("Unable to process TensorFlow Processor file " + t.getLocalizedMessage());
-			getLogger().error("{} failed to process due to {}; rolling back session", new Object[] { this, t });
-			throw t;
+			throw new ProcessException(t);
 		}
 	}
 }
