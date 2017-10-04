@@ -26,20 +26,11 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.stream.Collector;
-import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.nifi.annotation.behavior.EventDriven;
-import org.apache.nifi.annotation.behavior.ReadsAttribute;
-import org.apache.nifi.annotation.behavior.ReadsAttributes;
 import org.apache.nifi.annotation.behavior.SideEffectFree;
 import org.apache.nifi.annotation.behavior.SupportsBatching;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
@@ -60,8 +51,8 @@ import org.apache.nifi.processor.io.InputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 
 @EventDriven
-@SideEffectFree
 @SupportsBatching
+@SideEffectFree
 @Tags({ "tensorflow", "computer vision", "image" })
 @CapabilityDescription("Run TensorFlow Image Recognition")
 @SeeAlso({})
@@ -83,9 +74,6 @@ public class TensorFlowProcessor extends AbstractProcessor {
 
 	public static final Relationship REL_SUCCESS = new Relationship.Builder().name("success")
 			.description("Successfully determined image.").build();
-	public static final Relationship REL_UNMATCHED = new Relationship.Builder().name("unmatched")
-			.description("Found no matches in image").build();
-
 	public static final Relationship REL_FAILURE = new Relationship.Builder().name("failure")
 			.description("Failed to determine image.").build();
 
@@ -104,7 +92,6 @@ public class TensorFlowProcessor extends AbstractProcessor {
 		final Set<Relationship> relationships = new HashSet<Relationship>();
 		relationships.add(REL_SUCCESS);
 		relationships.add(REL_FAILURE);
-		relationships.add(REL_UNMATCHED);
 		this.relationships = Collections.unmodifiableSet(relationships);
 	}
 
@@ -120,6 +107,7 @@ public class TensorFlowProcessor extends AbstractProcessor {
 
 	@OnScheduled
 	public void onScheduled(final ProcessContext context) {
+		service = new TensorFlowService();
 		return;
 	}
 
@@ -132,6 +120,7 @@ public class TensorFlowProcessor extends AbstractProcessor {
 		try {
 			flowFile.getAttributes();
 
+			// read all bytes of the flowfile (tensor requires whole image)
 			String modelDir = flowFile.getAttribute(MODEL_DIR_NAME);
 			if (modelDir == null) {
 				modelDir = context.getProperty(MODEL_DIR_NAME).evaluateAttributeExpressions(flowFile).getValue();
@@ -139,36 +128,42 @@ public class TensorFlowProcessor extends AbstractProcessor {
 			if (modelDir == null) {
 				modelDir = "/models";
 			}
+			final String model = modelDir;
 
-			service = new TensorFlowService();
-			// read all bytes of the flowfile (tensor requires whole image)
-			InputStream is = session.read(flowFile);
-			List<Entry<Float, String>> results;
 			try {
-				byte[] byteArray = IOUtils.toByteArray(is);
-				results = service.getInception(byteArray, modelDir).limit(10).collect(Collectors.toList());
-			} catch(Exception e) {
+				final HashMap<String, String> attributes = new HashMap<String, String>();
+
+				session.read(flowFile, new InputStreamCallback() {
+					@Override
+					public void process(InputStream input) throws IOException {
+						byte[] byteArray = IOUtils.toByteArray(input);
+						getLogger().info(
+								String.format("read %d bytes from incoming file", new Object[] { byteArray.length }));
+						List<Entry<Float, String>> results = service.getInception(byteArray, model);
+						getLogger().debug(String.format("Found %d results", new Object[] { results.size() }));
+						for (int i = 0; i < results.size(); i++) {
+							Object[] key = new Object[] { ATTRIBUTE_OUTPUT_NAME, i };
+							Entry<Float, String> entry = results.get(i);
+							attributes.put(String.format("%s.%d.label", key), entry.getValue());
+							attributes.put(String.format("%s.%d.probability", key), entry.getKey().toString());
+						}
+
+					}
+				});
+				if (attributes.size() == 0) {
+					session.transfer(flowFile, REL_FAILURE);
+				} else {
+					flowFile = session.putAllAttributes(flowFile, attributes);
+					session.transfer(flowFile, REL_SUCCESS);
+				}
+			} catch (Exception e) {
 				throw new ProcessException(e);
-			} finally {
-				is.close();
 			}
-			
-			if (results == null) {
-				session.transfer(flowFile, REL_UNMATCHED);
-			} else {
-				HashMap<String,String> attributes = new HashMap<String,String>(results.size() * 2);
-				for(int i = 0; i < results.size(); i++) {
-					Object[] key = new Object[] { ATTRIBUTE_OUTPUT_NAME, i };
-					
-					Entry<Float, String> entry = results.get(i);
-					attributes.put(String.format("%s.%d.label", key), entry.getValue());
-					attributes.put(String.format("%s.%d.probability", key), entry.getKey().toString());
-				}					
-				flowFile = session.putAllAttributes(flowFile, attributes);
-				session.transfer(flowFile, REL_SUCCESS);
-			}
+
 			session.commit();
-		} catch (final Throwable t) {
+		} catch (
+
+		final Throwable t) {
 			getLogger().error("Unable to process TensorFlow Processor file " + t.getLocalizedMessage());
 			throw new ProcessException(t);
 		}
