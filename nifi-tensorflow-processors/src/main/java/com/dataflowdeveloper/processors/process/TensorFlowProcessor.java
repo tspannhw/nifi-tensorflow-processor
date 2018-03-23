@@ -137,17 +137,18 @@ public class TensorFlowProcessor extends AbstractProcessor {
 					@Override
 					public void process(InputStream input) throws IOException {
 						byte[] byteArray = IOUtils.toByteArray(input);
-						getLogger().info(
+						getLogger().debug(
 								String.format("read %d bytes from incoming file", new Object[] { byteArray.length }));
-						List<Entry<Float, String>> results = service.getInception(byteArray, model);
-						getLogger().debug(String.format("Found %d results", new Object[] { results.size() }));
-						for (int i = 0; i < results.size(); i++) {
-							Object[] key = new Object[] { ATTRIBUTE_OUTPUT_NAME, i };
-							Entry<Float, String> entry = results.get(i);
-							attributes.put(String.format("%s.%d.label", key), entry.getValue());
-							attributes.put(String.format("%s.%d.probability", key), entry.getKey().toString());
-						}
+						List<InceptionResult> results = service.getInception(byteArray, model);
 
+						if (results != null) {
+							getLogger().debug(String.format("Found %d results", new Object[] { results.size() }));
+
+							for (InceptionResult inceptionResult : results) {
+								attributes.put(String.format("label_%d", inceptionResult.getDisplayRank()), inceptionResult.getLabel() );
+								attributes.put(String.format("probability_%d", inceptionResult.getDisplayRank()), inceptionResult.getProbability());										
+							}
+						}
 					}
 				});
 				if (attributes.size() == 0) {

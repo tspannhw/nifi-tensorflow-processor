@@ -23,12 +23,14 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.nifi.util.MockFlowFile;
 import org.apache.nifi.util.TestRunner;
 import org.apache.nifi.util.TestRunners;
 import org.junit.Before;
 import org.junit.Test;
+import org.tensorflow.Tensor;
 
 public class TensorFlowProcessorTest {
 
@@ -47,21 +49,50 @@ public class TensorFlowProcessorTest {
 
 	@Test
 	public void testProcessor() throws Exception {
-		testRunner.setProperty(TensorFlowProcessor.MODEL_DIR, pathOfResource("models/graph.pb"));
+		testRunner.setProperty(TensorFlowProcessor.MODEL_DIR, pathOfResource("models/tensorflow_inception_graph.pb"));
 		testRunner.enqueue(this.getClass().getClassLoader().getResourceAsStream("test.jpg"));
 
 		runAndAssertHappy();
 	}
 
 	@Test
+	public void testProcessorWithMyFace() throws Exception {
+		testRunner.setProperty(TensorFlowProcessor.MODEL_DIR, pathOfResource("models/tensorflow_inception_graph.pb"));
+		testRunner.enqueue(this.getClass().getClassLoader().getResourceAsStream("TimSpann2.jpg"));
+		runAndDisplay();
+	}
+
+	@Test
+	public void testProcessorWithCat() throws Exception {
+		testRunner.setProperty(TensorFlowProcessor.MODEL_DIR, pathOfResource("models/tensorflow_inception_graph.pb"));
+		testRunner.enqueue(this.getClass().getClassLoader().getResourceAsStream("nanotie7.png"));
+		runAndDisplay();
+	}
+	
+	@Test
 	public void testReruns() throws Exception {
-		testRunner.setProperty(TensorFlowProcessor.MODEL_DIR, pathOfResource("models/graph.pb"));
+		testRunner.setProperty(TensorFlowProcessor.MODEL_DIR, pathOfResource("models/tensorflow_inception_graph.pb"));
 		testRunner.enqueue(this.getClass().getClassLoader().getResourceAsStream("test.jpg"));
 		testRunner.enqueue(this.getClass().getClassLoader().getResourceAsStream("test.jpg"));
 
 		runAndAssertHappy();
 	}
 
+	private void runAndDisplay() { 
+		testRunner.setValidateExpressionUsage(false);
+		testRunner.run();
+		testRunner.assertValid();
+		testRunner.assertAllFlowFilesTransferred(TensorFlowProcessor.REL_SUCCESS);
+		List<MockFlowFile> successFiles = testRunner.getFlowFilesForRelationship(TensorFlowProcessor.REL_SUCCESS);		
+//		for (MockFlowFile mockFile : successFiles) {
+//			
+//			Map<String, String> attributes =  mockFile.getAttributes();
+//			
+////			 for (String attribute : attributes.keySet()) {				 
+////				 System.out.println("Attribute:" + attribute + " = " + mockFile.getAttribute(attribute));
+////			 }
+//		}
+	}
 	private void runAndAssertHappy() {
 		testRunner.setValidateExpressionUsage(false);
 		testRunner.run();
@@ -70,7 +101,16 @@ public class TensorFlowProcessorTest {
 		List<MockFlowFile> successFiles = testRunner.getFlowFilesForRelationship(TensorFlowProcessor.REL_SUCCESS);
 
 		for (MockFlowFile mockFile : successFiles) {
-			assertEquals("giant panda", mockFile.getAttribute("tf.probabilities.0.label"));
+			assertEquals("giant panda", mockFile.getAttribute("label_1"));
+			assertEquals("95.23%", mockFile.getAttribute("probability_1"));
+			
+//			Map<String, String> attributes =  mockFile.getAttributes();
+//			
+//			 for (String attribute : attributes.keySet()) {				 
+//				 System.out.println("Attribute:" + attribute + " = " + mockFile.getAttribute(attribute));
+//			 }
 		}
+
 	}
+
 }

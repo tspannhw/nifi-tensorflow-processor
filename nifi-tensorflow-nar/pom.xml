@@ -19,7 +19,7 @@
     <parent>
         <groupId>com.dataflowdeveloper</groupId>
         <artifactId>tensorflow-processor</artifactId>
-        <version>2.1</version>
+        <version>1.6</version>
     </parent>
 
     <artifactId>nifi-tensorflow-nar</artifactId>
@@ -33,7 +33,7 @@
         <dependency>
             <groupId>com.dataflowdeveloper</groupId>
             <artifactId>nifi-tensorflow-processors</artifactId>
-            <version>2.1</version>
+            <version>1.6</version>
         </dependency>
     </dependencies>
 
